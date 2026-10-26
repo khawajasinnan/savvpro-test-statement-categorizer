@@ -37,9 +37,7 @@ Token counts are reported by the Cursor session billing/usage UI, not exported i
 
 ```
 Model: Composer (agent)
-Estimated input tokens:  [paste from usage UI]
+Estimated input tokens:  
 Estimated output tokens: [paste from usage UI]
 Total:                   [paste from usage UI]
 ```
-
-If you use other tools (ChatGPT, Claude web, etc.) while iterating, add rows above with the same fields.

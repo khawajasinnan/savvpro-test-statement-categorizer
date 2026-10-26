@@ -1,203 +1,163 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { fetchCategories, updateTransactionCategory, uploadStatement } from './api'
-import type { CategorizeResponse, CategorizedTransaction } from './types'
-import './App.css'
-
-function formatMoney(amount: number): string {
-  const sign = amount < 0 ? '-' : amount > 0 ? '+' : ''
-  return `${sign}$${Math.abs(amount).toFixed(2)}`
-}
-
-function effectiveCategory(tx: CategorizedTransaction): string {
-  return tx.user_category ?? tx.category
-}
+import { AppFooter } from './components/AppFooter'
+import { AppHeader } from './components/AppHeader'
+import { CategoryBreakdown } from './components/CategoryBreakdown'
+import { DiagnosticsPanel } from './components/DiagnosticsPanel'
+import { KpiCards } from './components/KpiCards'
+import { TransactionTable } from './components/TransactionTable'
+import { UploadSection } from './components/UploadSection'
+import { useStatementCategorizer } from './hooks/useStatementCategorizer'
 
 function App() {
-  const [categories, setCategories] = useState<string[]>([])
-  const [result, setResult] = useState<CategorizeResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [filter, setFilter] = useState<'all' | 'review'>('all')
-  const [updatingId, setUpdatingId] = useState<string | null>(null)
+  const {
+    categories,
+    result,
+    loading,
+    rescanning,
+    error,
+    filter,
+    categoryFilter,
+    search,
+    setSearch,
+    updatingId,
+    fileName,
+    fileSize,
+    stats,
+    visibleRows,
+    onFile,
+    loadSample,
+    clearStatement,
+    rescan,
+    onCategoryChange,
+    exportSummaryCsv,
+    setFilter,
+    filterByCategory,
+  } = useStatementCategorizer()
 
-  useEffect(() => {
-    fetchCategories().then(setCategories).catch(() => {})
-  }, [])
-
-  const onFile = useCallback(async (file: File | undefined) => {
-    if (!file) return
-    setError(null)
-    setLoading(true)
-    try {
-      const data = await uploadStatement(file)
-      setResult(data)
-      setFilter(data.needs_review_count > 0 ? 'review' : 'all')
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Upload failed')
-      setResult(null)
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  const onCategoryChange = async (txId: string, category: string) => {
-    setUpdatingId(txId)
-    setError(null)
-    try {
-      const data = await updateTransactionCategory(txId, category)
-      setResult(data)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Update failed')
-    } finally {
-      setUpdatingId(null)
-    }
+  const quickApprove = (id: string) => {
+    void onCategoryChange(id, 'Meals & Entertainment')
   }
 
-  const visibleRows = useMemo(() => {
-    if (!result) return []
-    if (filter === 'review') {
-      return result.transactions.filter((t) => effectiveCategory(t) === 'Needs Review')
-    }
-    return result.transactions
-  }, [result, filter])
-
-  const deductibleTotal = useMemo(() => {
-    if (!result) return 0
-    const skip = new Set(['Transfer / Not Spending', 'Refund', 'Needs Review'])
-    return result.transactions
-      .filter((t) => !skip.has(effectiveCategory(t)))
-      .reduce((sum, t) => sum + t.amount, 0)
-  }, [result])
-
   return (
-    <div className="app">
-      <header className="header">
-        <div>
-          <p className="eyebrow">Tax prep · Freelance designer</p>
-          <h1>Statement Categorizer</h1>
-          <p className="subtitle">
-            Upload a business credit card CSV. Rule-based matching assigns categories; uncertain rows go to{' '}
-            <strong>Needs Review</strong>.
-          </p>
-        </div>
-      </header>
+    <>
+      <AppHeader onExport={exportSummaryCsv} hasData={!!result} />
 
-      <section className="upload-panel">
-        <label className="upload-label">
-          <input
-            type="file"
-            accept=".csv"
-            disabled={loading}
-            onChange={(e) => onFile(e.target.files?.[0])}
-          />
-          <span>{loading ? 'Processing…' : 'Choose CSV statement'}</span>
-        </label>
-        <p className="hint">
-          Try <code>sample_data/freelance_designer_statement.csv</code> from the repo (fake data only).
-        </p>
-        {error && <p className="error">{error}</p>}
-      </section>
-
-      {result && (
-        <>
-          <section className="stats">
-            <div className="stat-card">
-              <span className="stat-label">Transactions</span>
-              <span className="stat-value">{result.transactions.length}</span>
-            </div>
-            <div className="stat-card warn">
-              <span className="stat-label">Needs review</span>
-              <span className="stat-value">{result.needs_review_count}</span>
-            </div>
-            <div className="stat-card">
-              <span className="stat-label">Est. deductible spend</span>
-              <span className="stat-value">{formatMoney(deductibleTotal)}</span>
-            </div>
-          </section>
-
-          <section className="summaries">
-            <h2>Category totals</h2>
-            <div className="summary-grid">
-              {result.summaries.map((s) => (
-                <div key={s.category} className="summary-item">
-                  <span className="summary-name">{s.category}</span>
-                  <span className="summary-meta">
-                    {s.count} rows · {formatMoney(s.total)}
-                  </span>
+      <main className="w-full pt-28 bg-background min-h-screen">
+        <section className="w-full px-margin-lg py-space-xl max-w-[1440px] mx-auto flex flex-col gap-space-lg">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-space-md p-space-lg rounded-xl bg-surface-container-low shadow-sm">
+            <div className="flex items-start sm:items-center gap-space-md">
+              <div className="p-2.5 rounded-lg bg-surface-container-high text-primary flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px]">format_image_left</span>
+              </div>
+              <div>
+                <div className="flex flex-wrap items-center gap-space-xs font-mono text-label-sm text-outline uppercase tracking-wider">
+                  <span>Tax Prep Engine</span>
+                  <span className="text-outline-variant">·</span>
+                  <span className="text-on-surface-variant">Freelance Designer</span>
+                  <span className="text-outline-variant">·</span>
+                  <span className="text-primary font-medium">Schedule C Ready</span>
                 </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="table-section">
-            <div className="table-toolbar">
-              <h2>Transactions</h2>
-              <div className="filters">
-                <button
-                  type="button"
-                  className={filter === 'all' ? 'active' : ''}
-                  onClick={() => setFilter('all')}
-                >
-                  All
-                </button>
-                <button
-                  type="button"
-                  className={filter === 'review' ? 'active' : ''}
-                  onClick={() => setFilter('review')}
-                >
-                  Needs review only
-                </button>
+                <p className="font-geist text-body-md text-on-surface mt-0.5">
+                  Deterministic engine:{' '}
+                  <span className="font-mono text-financial-md text-primary">0 LLM calls</span>, Python regex mapped to
+                  Schedule C categories.
+                </p>
               </div>
             </div>
-
-            <div className="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Category</th>
-                    <th>Confidence</th>
-                    <th>Why</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleRows.map((tx) => {
-                    const cat = effectiveCategory(tx)
-                    const needsReview = cat === 'Needs Review'
-                    return (
-                      <tr key={tx.id} className={needsReview ? 'row-review' : ''}>
-                        <td>{tx.date}</td>
-                        <td>{tx.description}</td>
-                        <td className={tx.amount > 0 ? 'credit' : ''}>{formatMoney(tx.amount)}</td>
-                        <td>
-                          <select
-                            value={cat}
-                            disabled={updatingId === tx.id}
-                            onChange={(e) => onCategoryChange(tx.id, e.target.value)}
-                          >
-                            {categories.map((c) => (
-                              <option key={c} value={c}>
-                                {c}
-                              </option>
-                            ))}
-                          </select>
-                        </td>
-                        <td>
-                          <span className={`badge conf-${tx.confidence}`}>{tx.confidence}</span>
-                        </td>
-                        <td className="reason">{tx.reason}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+            <div className="flex items-center gap-space-md font-mono text-label-sm">
+              <div className="flex items-center gap-space-xs px-space-md py-1.5 rounded-full bg-surface-container text-on-surface-variant">
+                <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+                Local API
+              </div>
+              <div className="flex items-center gap-space-xs px-space-md py-1.5 rounded-full bg-surface-container text-tertiary">
+                <span className="material-symbols-outlined text-[14px]">lock</span>
+                Fake data only
+              </div>
             </div>
-          </section>
-        </>
-      )}
-    </div>
+          </div>
+
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-space-lg">
+            <div>
+              <h1 className="font-geist text-headline-xl text-on-surface tracking-tight">Statement Categorizer</h1>
+              <p className="font-geist text-body-lg text-on-surface-variant max-w-3xl mt-1">
+                Ingest Chase, Amex, or Mercury CSV statements. Regex rules assign deductions; ambiguous rows go to{' '}
+                <span className="text-secondary font-medium">Needs Review</span>.
+              </p>
+            </div>
+            <div className="flex items-center gap-space-sm">
+              <button
+                type="button"
+                disabled={!fileName || rescanning}
+                onClick={() => void rescan()}
+                className="inline-flex items-center gap-space-xs px-space-md py-2 rounded-lg bg-surface-container-high hover:bg-surface-bright text-on-surface font-mono text-label-md transition-all shadow-sm disabled:opacity-40"
+              >
+                <span className={`material-symbols-outlined text-[16px] text-tertiary ${rescanning ? 'animate-spin' : ''}`}>
+                  {rescanning ? 'rotate_right' : 'refresh'}
+                </span>
+                Re-scan Strict Rules
+              </button>
+            </div>
+          </div>
+
+          <UploadSection
+            loading={loading}
+            fileName={fileName}
+            fileSize={fileSize}
+            itemCount={result?.transactions.length ?? 0}
+            error={error}
+            onFile={onFile}
+            onSample={() => void loadSample()}
+            onClear={clearStatement}
+          />
+
+          {result && stats && (
+            <>
+              <KpiCards
+                total={stats.total}
+                deductible={stats.deductible}
+                transfers={stats.transfers}
+                refunds={stats.refunds}
+                reviewCount={result.needs_review_count}
+                reviewTotal={stats.reviewTotal}
+                deductibleSpend={stats.deductibleSpend}
+                taxSavings={stats.taxSavings}
+                onReviewClick={() => setFilter('review')}
+              />
+
+              <CategoryBreakdown
+                summaries={result.summaries}
+                activeCategory={categoryFilter}
+                onSelect={filterByCategory}
+              />
+
+              <TransactionTable
+                rows={visibleRows}
+                totalCount={result.transactions.length}
+                categories={categories}
+                filter={filter}
+                search={search}
+                confirmedCount={stats.confirmed}
+                reviewCount={result.needs_review_count}
+                updatingId={updatingId}
+                onSearch={setSearch}
+                onFilter={setFilter}
+                onCategoryChange={onCategoryChange}
+                onQuickApprove={quickApprove}
+              />
+
+              <DiagnosticsPanel recordCount={result.transactions.length} />
+            </>
+          )}
+
+          {!result && !loading && (
+            <p className="font-geist text-body-md text-on-surface-variant text-center py-space-2xl">
+              Upload a CSV or load the sample to see categorization results.
+            </p>
+          )}
+        </section>
+      </main>
+
+      <AppFooter />
+    </>
   )
 }
 
